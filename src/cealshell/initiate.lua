@@ -1,6 +1,7 @@
 return function(plugin: Plugin)
 	--// Services
 	local LogService = game:GetService("LogService")
+	local HttpService = game:GetService("HttpService")
 	
 	--// Locals
 	local signer = "Cealshell"
@@ -13,6 +14,7 @@ return function(plugin: Plugin)
 	local registry = require(libs:FindFirstChild("registry"))
 	local types = require(libs:FindFirstChild("types"))
 	local helper = require(libs:FindFirstChild("helper"))
+	local packager = require(libs:FindFirstChild("packager"))
 
 	--// Settings
 	local remotes = {}
@@ -169,37 +171,161 @@ return function(plugin: Plugin)
 	local pacData = {}
 	
 	registry:register("rbxpackage", nil, function(args:{types.args}, cArgs:{string})
+		-- Handle pending confirmations first
+		if pacAwaiting then
+			local confirm = helper:doesArgExist("y", cArgs)
+			local deny = helper:doesArgExist("n", cArgs)
+			
+			if confirm then
+				if pacAwaiting == "install" then
+					local _shared = helper:doesArgExist("s", cArgs)
+					local i = helper:ensureCealshellPath(_shared)
+					for _, pkg in pairs(pacData) do
+						packager:build(pkg.data, i)
+						print("Successfully installed " .. pkg.name)
+					end
+				elseif pacAwaiting == "uninstall" then
+					for _, pkg in pairs(pacData) do
+						pkg:Destroy()
+						print("Uninstalled " .. pkg.Name)
+					end
+				end
+				pacAwaiting = false
+				pacData = {}
+				return
+			elseif deny then
+				print("Operation cancelled.")
+				pacAwaiting = false
+				pacData = {}
+				return
+			end
+		end
+		
 		local action = args[1]
 		if not action then
 			print("No action given.")
 
 		elseif table.find({"i", "install", "add"}, action) then
-			local i = helper:ensureCealshellPath()
+			local _shared = helper:doesArgExist("s", cArgs)
+			local autoConfirm = helper:doesArgExist("y", cArgs)
+			local i = helper:ensureCealshellPath(_shared)
 			print("Looking for package(s) in remotes...")
-			print("THIS IS UNFINISHED; NO ACTION CONTINUED")
+			
+			local lookingArgs = table.clone(args)
+			lookingArgs[1] = nil
+			
+			local toInstall = {}
+			
+			for _, packageName in pairs(lookingArgs) do
+				if typeof(packageName) ~= "string" then continue end
+				
+				local retrievedPackage = nil
+				local isAbsolute = packageName:find(":") ~= nil
+				
+				if isAbsolute then
+					-- Package address is absolute (contains host:port or similar), parse it directly
+					local packageUrl = packager:parse(packageName)
+					local packageData = packager:retrieve(packageUrl)
+					if packageData then
+						local success, parsed = pcall(HttpService.JSONDecode, HttpService, packageData)
+						if success and parsed then
+							retrievedPackage = parsed
+						end
+					end
+				else
+					-- Package name is relative, try each remote
+					for _, remote in pairs(remotes) do
+						local packageUrl = remote .. packageName
+						local packageData = packager:retrieve(packageUrl)
+						if packageData then
+							local success, parsed = pcall(HttpService.JSONDecode, HttpService, packageData)
+							if success and parsed then
+								retrievedPackage = parsed
+								break
+							end
+						end
+					end
+				end
+				
+				if retrievedPackage then
+					table.insert(toInstall, {name = packageName, data = retrievedPackage})
+				else
+					warn("Could not find package " .. packageName .. " in any remote")
+				end
+			end
+			
+			if #toInstall > 0 then
+				-- Show preview of what will be installed
+				print("\nPackages to install:")
+				for _, pkg in pairs(toInstall) do
+					print("  - " .. pkg.name)
+					if pkg.data.dependencies and typeof(pkg.data.dependencies) == "table" then
+						for _, dep in pairs(pkg.data.dependencies) do
+							print("    └─ " .. dep)
+						end
+					end
+				end
+				print()
+				
+				if autoConfirm then
+					-- Auto-confirm with --y flag
+					for _, pkg in pairs(toInstall) do
+						packager:build(pkg.data, i)
+						print("Successfully installed " .. pkg.name)
+					end
+				else
+					-- Wait for confirmation
+					print("Continue? [--y/--n]")
+					pacAwaiting = "install"
+					pacData = toInstall
+				end
+			end
 
 		elseif table.find({"rm", "uinstall", "uninstall", "remove"}, action) then
 			local i = helper:ensureCealshellPath()
 			print("Filtering for package(s) installed...")
 			
 			local _shared = helper:doesArgExist("s", cArgs)
+			local autoConfirm = helper:doesArgExist("y", cArgs)
 			
 			local lookingArgs = table.clone(args)
 			lookingArgs[1] = nil; lookingArgs[2] = nil
 			local uninstalling = {}
+			
 			for _, x in i:GetChildren() do
 				for _, y in lookingArgs do
 					if x.Name:find(y) then
 						table.insert(uninstalling, x)
-						return
 					end
 				end
 			end
 			
-			print("Uninstalling following "..(_shared and "shared" or "").." packages: ", table.concat(uninstalling, ", "))
-			print("Continue? [--y/--n]")
-			pacAwaiting = "uninstall"
-			pacData = uninstalling
+			if #uninstalling > 0 then
+				local pkgNames = {}
+				for _, pkg in pairs(uninstalling) do
+					table.insert(pkgNames, pkg.Name)
+				end
+				print("Packages to uninstall:")
+				for _, name in pairs(pkgNames) do
+					print("  - " .. name)
+				end
+				print()
+				
+				if autoConfirm then
+					-- Auto-confirm with --y flag
+					for _, pkg in pairs(uninstalling) do
+						pkg:Destroy()
+						print("Uninstalled " .. pkg.Name)
+					end
+				else
+					-- Wait for confirmation
+					print("Continue? [--y/--n]")
+					pacAwaiting = "uninstall"
+					pacData = uninstalling
+				end
+			else
+				warn("No packages found matching the given names")
+			end
 
 		elseif action == "remote" then
 			local subaction = args[2]
