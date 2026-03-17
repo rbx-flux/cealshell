@@ -37,13 +37,13 @@ function helper:ensureCealshellPath(_shared: boolean?)
 		f = ReplicatedStorage:FindFirstChild(".iridium")
 		if not f then
 			f = Instance.new("Configuration", ReplicatedStorage)
-			f.Name = ".iridium"
+			f.Name = ".cealshell"
 		end
 	else
 		f = ServerStorage:FindFirstChild(".iridium")
 		if not f then
 			f = Instance.new("Configuration", ServerStorage)
-			f.Name = ".iridium"
+			f.Name = ".cealshell"
 		end
 	end
 	return f
