@@ -6,7 +6,25 @@ local reg = {}
 reg.commands = {} :: types.regtable
 reg.callevent = Instance.new("BindableEvent", script)
 
+--// Locals
+local session = "Unknown"
+local strictSigners = {
+	["cealshell"] = {
+		"cealshell",
+	}
+}
+
+function reg:sign(uid: string)
+	if uid == script.Parent.Parent.initiate.UniqueId then
+		session = "cealshell"
+	end
+end
+
 function reg:register(command:string, args:{types.args}?, callback: (args:{types.args}, cArgs:{string}) -> (), description:string?, manual:string|{string}?, signer:string?)
+	if strictSigners[signer] ~= nil and not table.find(strictSigners[signer], session) then
+		warn(("[Cealshell] Session '%s' does not have sufficient privileges to access signature '%s'."):format(session, signer))
+		return
+	end
 	reg.commands[command] = {
 		arguments=args,
 		callback=callback,
@@ -42,7 +60,7 @@ function reg:call(command: string, givenArgs: {string})
 			end
 		end
 	end
-	if not rcmd then warn("[Iridium] Invalid Command: " .. command); return end
+	if not rcmd then warn("[Cealshell] Invalid Command: " .. command); return end
 
 	-- Transform Arguments
 	local args = {}

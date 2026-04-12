@@ -21,11 +21,16 @@ end
 function helper:doesArgExist(argName:string, args:{types.args})
 	for _, x in pairs(args) do
 		if typeof(x) ~= "string" then continue end
-		if x:sub(1, 2+argName:len()) == "--"..argName then
+		if x:sub(1, 1+argName:len()) == "--"..argName then
 			return true
 		end
-		if x:sub(1, 1+argName:len()) == "-"..argName then
-			return true
+		if x:sub(1, 1) == "-" then
+			local flags = x:sub(2)
+			for i = 1, #flags do
+				if flags:sub(i,i) == argName then
+					return true
+				end
+			end
 		end
 	end
     return nil

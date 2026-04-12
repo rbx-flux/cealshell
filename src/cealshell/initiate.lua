@@ -4,7 +4,7 @@ return function(plugin: Plugin)
 	local HttpService = game:GetService("HttpService")
 	
 	--// Locals
-	local signer = "Cealshell"
+	local signer = "cealshell"
 
 	--// Folders
 	local Cealshell = script.Parent
@@ -15,6 +15,8 @@ return function(plugin: Plugin)
 	local types = require(libs:FindFirstChild("types"))
 	local helper = require(libs:FindFirstChild("helper"))
 	local packager = require(libs:FindFirstChild("packager"))
+
+	registry:sign(script.UniqueId)
 
 	--// Settings
 	local remotes = {}
@@ -47,7 +49,7 @@ return function(plugin: Plugin)
 
 	--// Register
 
-	--i help
+	--c help
 	registry:register("help", nil, function()
 		print(string.rep("\n", 2))
 		print("cealshell() 2026 ©")
@@ -68,7 +70,7 @@ return function(plugin: Plugin)
 		end
 	end, "Shows a list of commands.", nil, signer):alias("?")
 
-	--i manual
+	--c manual
 	registry:register("manual", nil, function(args: {types.args})
 		local cmdName = args[1]
 		local subName = args[2]
@@ -166,55 +168,8 @@ return function(plugin: Plugin)
 		print("discord: .gg/Vpsyd59r5X")
 	end, "Credits & Contacts for Cealshell.")
 
-	--i rbxpackage
-	local pacAwaiting = false
-	local pacData = {}
-	local pacSharedMode = false
-	
-	-- Helper function to handle pending confirmations
-	local function handleConfirmation(confirmed: boolean)
-		if not pacAwaiting then
-			print("No pending action to confirm.")
-			return
-		end
-		
-		if confirmed then
-			if pacAwaiting == "install" then
-				local i = helper:ensureCealshellPath(pacSharedMode)
-				for _, pkg in pairs(pacData) do
-					packager:build(pkg.data, i)
-					print("Successfully installed " .. pkg.name)
-				end
-			elseif pacAwaiting == "uninstall" then
-				for _, pkg in pairs(pacData) do
-					pkg:Destroy()
-					print("Uninstalled " .. pkg.Name)
-				end
-			end
-		else
-			print("Operation cancelled.")
-		end
-		
-		pacAwaiting = false
-		pacData = {}
-		pacSharedMode = false
-	end
-	
+	--c rbxpackage
 	registry:register("rbxpackage", nil, function(args:{types.args}, cArgs:{string})
-		-- Handle pending confirmations first
-		if pacAwaiting then
-			local confirm = helper:doesArgExist("y", cArgs)
-			local deny = helper:doesArgExist("n", cArgs)
-			
-			if confirm then
-				handleConfirmation(true)
-				return
-			elseif deny then
-				handleConfirmation(false)
-				return
-			end
-		end
-		
 		local action = args[1]
 		if not action then
 			print("No action given.")
@@ -305,12 +260,6 @@ return function(plugin: Plugin)
 						packager:build(pkg.data, i)
 						print("Successfully installed " .. pkg.name)
 					end
-				else
-					-- Wait for confirmation
-				print("Type --c --y to confirm or --c --n to cancel")
-					pacAwaiting = "install"
-					pacData = toInstall
-					pacSharedMode = _shared
 				end
 			end
 
@@ -441,17 +390,7 @@ return function(plugin: Plugin)
 		}
 	}, signer):alias({"rbxp", "pacman"})
 
-	--i confirm (y/yes)
-	registry:register("y", nil, function()
-		handleConfirmation(true)
-	end, "Confirms the pending action.", nil, signer):alias("yes")
-
-	--i deny (n/no)
-	registry:register("n", nil, function()
-		handleConfirmation(false)
-	end, "Cancels the pending action.", nil, signer):alias("no")
-
-	--i clear
+	--c clear
 	registry:register("clear", nil, function()
 		print(string.rep("\n", 50))
 	end, "Clears the console.", nil, signer):alias("cls")
