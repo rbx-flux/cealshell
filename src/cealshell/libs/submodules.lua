@@ -190,24 +190,25 @@ function submodules:load()
         warn(("[Cealshell] Submodule '%s' has invalid syntax. (Missing --@submodule operator at first line)"))
     end
 
+    --[[
     local pubKey
     local pubKeyI = initialSource:find("--#")
     if pubKeyI then
         local endSuffix = initialSource:find("\n", #identificator+2)
         pubKey = initialSource:sub(pubKeyI+3, endSuffix-1)
     end
+    ]]
 
-    local funcs = getTopLevelFunctions(initialSource:sub(#identificator+#pubKey+6))
+    local funcs = getTopLevelFunctions(initialSource:sub(#identificator+6))--#pubKey+6))
         :gsub("function%s+(%w+)", "function submodule.%1")
 
     local source =
         ([[local submodule = {}
-submodule.publicKey = "%s"
 
 %s
 
 return submodule]])
-        :format(pubKey, funcs)
+        :format(funcs)--pubKey, funcs)
 
     local module = Instance.new("ModuleScript", folder)
     module.Source = source
