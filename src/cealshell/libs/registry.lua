@@ -3,6 +3,32 @@ local libs = script.Parent
 --// Modules
 local types = require(libs:FindFirstChild("types"))
 
+--// Locals
+local function createAliasTable()
+    local data = {}
+    local set = {}
+
+    local mt = {}
+    mt.__index = mt
+
+    function mt:insert(value)
+        if not set[value] then
+            set[value] = true
+            table.insert(data, value)
+        end
+    end
+
+    function mt:getAll()
+        return data
+    end
+
+    function mt:__len()
+        return #data
+    end
+
+    return setmetatable({}, mt)
+end
+
 --// Globals
 local reg = {}
 reg.commands = {} :: types.regtable
@@ -13,7 +39,7 @@ function reg:register(command:string, args:{types.args}?, callback: (args:{types
 		arguments=args,
 		callback=callback,
 		description=description,
-		stored_aliases={},
+		stored_aliases=createAliasTable(),	
 		alias=function(self, new:string|{string})
 			if typeof(new) == "string" then
 				table.insert(self.stored_aliases, new)
