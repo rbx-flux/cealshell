@@ -57,6 +57,11 @@ function helper:ensureCealshellPath(_shared: boolean?)
 		src.Name = "src"
 	end
 
+	if not f:FindFirstChild(".index") then
+		local ix = Instance.new("ModuleScript", f)
+		ix.Name = ".index"
+	end
+
 	return f
 end
 
