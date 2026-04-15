@@ -169,8 +169,8 @@ return function(plugin: Plugin)
 
 	--c config
 	registry:register("config", nil, function(args:{types.args}, cArgs:{string})
-		local whitelist = {
-			"cealshell:advanced",
+		local blacklist = {
+			"cealshell:remotes",
 		}
 		local function format(x: string)
 			if x == "true" then
@@ -186,7 +186,7 @@ return function(plugin: Plugin)
 		if plugin:GetSetting("cealshell:advanced") == true then
 			plugin:SetSetting(args[1], format(args[2]))
 		else
-			if table.find(whitelist, args[1]) then
+			if not table.find(blacklist, args[1]) then
 				plugin:SetSetting(args[1], format(args[2]))
 			else
 				warn("[Cealshell] This configuration is locked behind advanced mode. Use '--c config cealshell:advanced true' to enable it.")
@@ -195,6 +195,11 @@ return function(plugin: Plugin)
 		end
 		print(("[Cealshell] Successfully set '%s' to '%s' (%s)."):format(args[1], args[2], typeof(args[2])))
 	end, nil, nil, signer):alias("cfg")
+
+	--c submodule
+	registry:register("submodule", nil, function(args:{types.args}, cArgs:{string})
+	
+	end, nil, nil, signer):alias("smodule", "subm")
 
 	--c rbxpackage
 	registry:register("rbxpackage", nil, function(args:{types.args}, cArgs:{string})
