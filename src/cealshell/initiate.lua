@@ -177,7 +177,7 @@ return function(plugin: Plugin)
 				return true
 			elseif x == "false" then
 				return false
-			elseif tostring(tonumber(x)) == x then
+			elseif x:match("^%-?%d+%.?%d*$") then
 				return tonumber(x)
 			else
 				return x
