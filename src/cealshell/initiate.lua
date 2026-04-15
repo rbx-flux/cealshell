@@ -15,6 +15,8 @@ return function(plugin: Plugin)
 	local types = require(libs:FindFirstChild("types"))
 	local helper = require(libs:FindFirstChild("helper"))
 	local packager = require(libs:FindFirstChild("packager"))
+	local pmanager = require(libs:FindFirstChild("pmanager"))
+	pmanager:constructor(plugin)
 
 	--// Settings
 	local remotes = {}
@@ -31,6 +33,7 @@ return function(plugin: Plugin)
 	if firstTime ~= true then
 		plugin:SetSetting("cealshell:startup", true)
 		plugin:SetSetting("cealshell:advanced", false)
+		plugin:SetSetting("cealshell:remotes/default", "https://api.cealshell.dev/")
 		
 		for _, remote in trustedremotes do
 			if not table.find(remotes, remote) then
@@ -171,6 +174,7 @@ return function(plugin: Plugin)
 	registry:register("config", nil, function(args:{types.args}, cArgs:{string})
 		local blacklist = {
 			"cealshell:remotes",
+			"cealshell:remotes/default"
 		}
 		local function format(x: string)
 			if x == "true" then

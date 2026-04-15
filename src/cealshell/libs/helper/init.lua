@@ -58,7 +58,8 @@ function helper:ensureCealshellPath(_shared: boolean?)
 	end
 
 	if not f:FindFirstChild(".index") then
-		local ix = Instance.new("ModuleScript", f)
+		local ix = script:FindFirstChild("index"):Clone()
+		ix.Parent  = f
 		ix.Name = ".index"
 	end
 
