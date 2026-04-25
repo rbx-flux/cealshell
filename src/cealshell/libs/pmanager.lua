@@ -2,27 +2,24 @@ local libs = script.Parent
 local packager = require(libs:FindFirstChild("packager"))
 local helper = require(libs:FindFirstChild("helper"))
 
-local UIS = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 
 local plugin: Plugin
 local pmanager = {}
-pmanager.queue = {}
-pmanager.awaitingConfirmation = false
+pmanager.pendingOperations = {}
 
-local function install(toInstall: {{any}}, i: Configuration)
-    local ix = require(i[".index"])
-    for _, pkg in pairs(toInstall) do
-        local source = packager:build(pkg.data, i["src"])
-        ix:register(pkg.name, source)
-        print("Successfully installed " .. pkg.name)
-    end
+function pmanager:constructor(_plugin: Plugin)
+    plugin = _plugin
 end
 
-local function installedPackageExists(ix, packageName)
-    return ix:read()[packageName] ~= nil
+-- Check if a package is installed
+function pmanager:check(share: boolean, name: string): boolean
+    local f = helper:ensureCealshellPath(share)
+    local ix = require(f[".index"])
+    return ix:read()[name] ~= nil
 end
 
+-- Resolve package dependencies
 local function resolveDependencies(ix, toInstall, visited)
     visited = visited or {}
     local resolved = {}
@@ -33,8 +30,8 @@ local function resolveDependencies(ix, toInstall, visited)
             
             if pkg.data and pkg.data.dependencies and typeof(pkg.data.dependencies) == "table" then
                 for _, dep in pairs(pkg.data.dependencies) do
-                    if not installedPackageExists(ix, dep) then
-                        warn("[Cealshell] Dependency " .. dep .. " for " .. pkg.name .. " not installed. Skipping.")
+                    if not (ix:read()[dep] ~= nil) then
+                        warn("[Cealshell] Dependency '" .. dep .. "' for '" .. pkg.name .. "' is not installed. Proceeding anyway.")
                     end
                 end
             end
@@ -46,43 +43,65 @@ local function resolveDependencies(ix, toInstall, visited)
     return resolved
 end
 
-UIS.InputBegan:Connect(function(input)
-    if pmanager.awaitingConfirmation and #pmanager.queue > 0 then
-        if input.KeyCode == Enum.KeyCode.Y then
-            install(table.unpack(pmanager.queue[1]))
-        elseif input.KeyCode == Enum.KeyCode.N then
-            print("[Cealshell] Cancelling installation.")
-        else
-            return
-        end
-        pmanager.awaitingConfirmation = false
-        table.remove(pmanager.queue, 1)
+-- Internal: Perform the actual installation
+local function executeInstall(toInstall: {{any}}, cealshellFolder: Instance, isInstanceSpecific: boolean)
+    local ix
+    if not isInstanceSpecific then
+        ix = require(cealshellFolder[".index"])
     end
-end)
-
-function pmanager:constructor(_plugin: Plugin)
-    plugin = _plugin
+    
+    for _, pkg in pairs(toInstall) do
+        local source = packager:build(pkg.data, ix and cealshellFolder["src"] or cealshellFolder)
+        if ix ~= nil then
+            ix:register(pkg.name, source)
+        end
+        print("[Cealshell] Successfully installed '" .. pkg.name .. "'")
+    end
 end
 
-function pmanager:check(share: boolean, name: string)
-    local f = helper.ensureCealshellPath(share)
-    local ix = require(f[".index"])
-    return ix:read()[name] ~= nil
+-- Internal: Perform the actual uninstall
+local function executeUninstall(toRemove: {string}, cealshellFolder: Instance)
+    local ix = require(cealshellFolder[".index"])
+    local packages = ix:read()
+    
+    for _, pkgName in pairs(toRemove) do
+        if packages[pkgName] then
+            local pkgConfig = packages[pkgName]
+            if pkgConfig:FindFirstChild("source") then
+                pkgConfig.source.Value:Destroy()
+            end
+            ix:deregister(pkgName)
+            print("[Cealshell] Successfully uninstalled '" .. pkgName .. "'")
+        end
+    end
 end
 
-function pmanager:install(share: boolean, autoConfirm: boolean, remotes: {string}, packages: {string})
-    local f = helper.ensureCealshellPath(share);
-    local ix = require(f[".index"])
+-- Install packages with optional confirmation
+function pmanager:install(data: {[string]: boolean}, autoConfirm: boolean, remotes: {string}, packages: {string})
+    local share = data.s
+    local selectedInstance = data.i -- Instance to install into (optional)
+    
+    -- Use selected instance if provided, otherwise use cealshell folder
+    local targetFolder
+    local ix
+    if selectedInstance and typeof(selectedInstance) == "Instance" then
+        -- Create a .cealshell structure in the selected instance
+        targetFolder = selectedInstance
+    else
+        -- Use standard cealshell folder
+        targetFolder = helper:ensureCealshellPath(share)
+        ix = require(targetFolder[".index"])
+    end
 
     if not remotes or #remotes == 0 then
         warn("[Cealshell] No remotes configured. Check plugin settings.")
         return
     end
 
-    -- Get package data
+    -- Get package data from remotes
     local toInstall = {}
     for _, pkg in pairs(packages) do
-        if type(pkg) ~= "string" then continue end
+        if type(pkg) ~= "string" or pkg == "" then continue end
         
         local retrievedPackage = nil
         local hasUrl = pkg:find("/") ~= nil
@@ -131,75 +150,105 @@ function pmanager:install(share: boolean, autoConfirm: boolean, remotes: {string
         if retrievedPackage then
             table.insert(toInstall, {name = pkg, data = retrievedPackage})
         else
-            warn("[Cealshell] Could not find package " .. pkg .. " in any remote")
+            warn("[Cealshell] Could not find package '" .. pkg .. "' in any remote")
         end
     end
 
-    toInstall = resolveDependencies(ix, toInstall)
+    if ix then
+        toInstall = resolveDependencies(ix, toInstall)
+    end
 
-    -- Installation
+    -- Display packages to install
     print()
     if #toInstall > 0 then
         print("Packages to install:")
         for _, pkg in pairs(toInstall) do
-            print("  - " .. (pkg.name or "UNKNOWN"))
+            print("  - " .. pkg.name)
             if pkg.data and pkg.data.instances then
                 print("    └─ " .. #pkg.data.instances .. " instances")
-            end
-            if pkg.data and pkg.data.dependencies and typeof(pkg.data.dependencies) == "table" then
-                for _, dep in pairs(pkg.data.dependencies) do
-                    print("    └─ " .. dep)
-                end
             end
         end
         print()
         
         if autoConfirm then
-            install(toInstall, f)
+            executeInstall(toInstall, targetFolder, selectedInstance ~= nil)
         else
-            print("Continue installation? [Press y/n]")
-            pmanager.awaitingConfirmation = true
-            table.insert(pmanager.queue, {toInstall, f})
+            -- Store for later confirmation
+            pmanager.pendingOperations.install = {
+                packages = toInstall,
+                folder = targetFolder,
+                isInstanceSpecific = selectedInstance ~= nil
+            }
+            print("[Cealshell] Pending confirmation. Type 'confirm' to proceed or 'cancel' to abort.")
         end
+    else
+        print("[Cealshell] No packages to install.")
     end
 end
 
+-- Uninstall packages with optional confirmation
 function pmanager:uninstall(share: boolean, autoConfirm: boolean, packages: {string})
-    local f = helper.ensureCealshellPath(share);
+    local f = helper:ensureCealshellPath(share)
     local ix = require(f[".index"])
+    local installed = ix:read()
 
-    -- Show packages to uninstall
+    -- Filter packages that exist
+    local packagesToRemove = {}
     print()
     print("Packages to uninstall:")
-    local packagesToUninstall = {}
-    local t = ix:read()
     for _, pkg in pairs(packages) do
-        if t[pkg] ~= nil then
-            table.insert(packagesToUninstall, pkg)
+        if type(pkg) == "string" and installed[pkg] then
+            table.insert(packagesToRemove, pkg)
             print("  - " .. pkg)
-        else
-            warn("[Cealshell] Package " .. pkg .. " not found.")
+        elseif type(pkg) == "string" then
+            warn("[Cealshell] Package '" .. pkg .. "' not found")
         end
     end
     print()
     
-    if #packagesToUninstall == 0 then
-        print("No packages to uninstall.")
+    if #packagesToRemove == 0 then
+        print("[Cealshell] No packages to uninstall.")
         return
     end
     
     if autoConfirm then
-        for _, pkg in pairs(packagesToUninstall) do
-            t[pkg].source.Value:Destroy()
-            t[pkg]:Destroy()
-            ix:deregister(pkg)
-            print("Successfully uninstalled " .. pkg)
-        end
+        executeUninstall(packagesToRemove, f)
     else
-        print("Continue uninstallation? [Press y/n]")
-        pmanager.awaitingConfirmation = true
-        table.insert(pmanager.queue, {packagesToUninstall, f})
+        -- Store for later confirmation
+        pmanager.pendingOperations.uninstall = {
+            packages = packagesToRemove,
+            folder = f
+        }
+        print("[Cealshell] Pending confirmation. Type 'confirm' to proceed or 'cancel' to abort.")
     end
+end
+
+-- Confirm the pending operation
+function pmanager:confirm()
+    if pmanager.pendingOperations.install then
+        local op = pmanager.pendingOperations.install
+        executeInstall(op.packages, op.folder, op.isInstanceSpecific or false)
+        pmanager.pendingOperations.install = nil
+        return true
+    elseif pmanager.pendingOperations.uninstall then
+        local op = pmanager.pendingOperations.uninstall
+        executeUninstall(op.packages, op.folder)
+        pmanager.pendingOperations.uninstall = nil
+        return true
+    end
+    print("[Cealshell] No pending operation to confirm.")
+    return false
+end
+
+-- Cancel the pending operation
+function pmanager:cancel()
+    if pmanager.pendingOperations.install or pmanager.pendingOperations.uninstall then
+        print("[Cealshell] Operation cancelled.")
+        pmanager.pendingOperations = {}
+        return true
+    end
+    print("[Cealshell] No pending operation to cancel.")
+    return false
 end
 
 return pmanager

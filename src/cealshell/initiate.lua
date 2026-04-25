@@ -200,154 +200,159 @@ return function(plugin: Plugin)
 		print(("[Cealshell] Successfully set '%s' to '%s' (%s)."):format(args[1], args[2], typeof(args[2])))
 	end, nil, nil, signer):alias("cfg")
 
+	--c confirm
+	registry:register("confirm", nil, function()
+		if pmanager:confirm() then
+			-- Operation confirmed and executed
+		end
+	end, "Confirms a pending package operation.", nil, signer)
+
+	--c cancel
+	registry:register("cancel", nil, function()
+		if pmanager:cancel() then
+			-- Operation cancelled
+		end
+	end, "Cancels a pending package operation.", nil, signer)
+
 	--c submodule
+	--[[
 	registry:register("submodule", nil, function(args:{types.args}, cArgs:{string})
 	
 	end, nil, nil, signer):alias("smodule", "subm")
+	]]--
 
 	--c rbxpackage
 	registry:register("rbxpackage", nil, function(args:{types.args}, cArgs:{string})
 		local action = args[1]
 		if not action then
-			print("No action given.")
+			print("[Cealshell] Usage: rbxpackage <install|remove|list|remote> [options]")
+			return
+		end
 
-		elseif table.find({"i", "install", "add"}, action) then
-			local _shared, i_shared = helper:doesArgExist("s", cArgs)
-			local autoConfirm, i_autoConfirm = helper:doesArgExist("y", cArgs)
-			print("Looking for package(s) in remotes...")
+		-- Common flags
+		local _shared = helper:doesArgExist("s", cArgs)
+		local autoConfirm = helper:doesArgExist("y", cArgs)
+		local inSelected = helper:doesArgExist("i", cArgs)
+
+		if table.find({"i", "install", "add"}, action) then
+			print("[Cealshell] Looking for package(s) in remotes...")
 			
 			local lookingArgs = table.clone(args)
-			lookingArgs[1] = nil
-			lookingArgs[i_autoConfirm] = nil
-			lookingArgs[i_shared] = nil
+			table.remove(lookingArgs, 1) -- Remove action
 			
-			pmanager:install(_shared, autoConfirm, remotes, lookingArgs)
-
-		elseif table.find({"rm", "uinstall", "uninstall", "remove"}, action) then
-			local i = helper:ensureCealshellPath()
-			print("Filtering for package(s) installed...")
-			
-			local _shared = helper:doesArgExist("s", cArgs)
-			local autoConfirm = helper:doesArgExist("y", cArgs)
-			
-			local lookingArgs = table.clone(args)
-			lookingArgs[1] = nil; lookingArgs[2] = nil
-			local uninstalling = {}
-			
-			for _, x in i:GetChildren() do
-				for _, y in lookingArgs do
-					if x.Name:find(y) then
-						table.insert(uninstalling, x)
-					end
+			-- If -i flag is set, get the selected instance
+			local selectedInstance = nil
+			if inSelected then
+				local selection = game:GetService("Selection"):Get()
+				if selection and #selection > 0 then
+					selectedInstance = selection[1]
+				else
+					warn("[Cealshell] No instance selected. Use -i to insert into a selected instance.")
+					return
 				end
 			end
 			
-			if #uninstalling > 0 then
-				local pkgNames = {}
-				for _, pkg in pairs(uninstalling) do
-					table.insert(pkgNames, pkg.Name)
+			pmanager:install({s = _shared, i = selectedInstance}, autoConfirm, remotes, lookingArgs)
+
+		elseif table.find({"rm", "remove", "uninstall"}, action) then
+			print("[Cealshell] Filtering for installed package(s)...")
+			
+			local lookingArgs = table.clone(args)
+			table.remove(lookingArgs, 1) -- Remove action
+			
+			-- If no packages specified, show error
+			if #lookingArgs == 0 then
+				warn("[Cealshell] No packages specified. Usage: rbxpackage remove <package1> [package2...]")
+				return
+			end
+			
+			pmanager:uninstall(_shared, autoConfirm, lookingArgs)
+
+		elseif action == "list" then
+			local pattern = args[2]
+			local f = helper:ensureCealshellPath(_shared)
+			
+			print("[Cealshell] Installed packages:")
+			local found = 0
+			for pkgName in pairs(require(f[".index"]):read()) do
+				if not pattern or pkgName:find(pattern) then
+					print("  - " .. pkgName)
+					found += 1
 				end
-				print("Packages to uninstall:")
-				for _, name in pairs(pkgNames) do
-					print("  - " .. name)
-				end
-				print()
-				
-				if autoConfirm then
-					-- Auto-confirm with --y flag
-					for _, pkg in pairs(uninstalling) do
-						pkg:Destroy()
-						print("Uninstalled " .. pkg.Name)
-					end
-				else
-					-- Wait for confirmation
-				print("Type --c --y to confirm or --c --n to cancel")
-					pacAwaiting = "uninstall"
-					pacData = uninstalling
-					pacSharedMode = _shared
-				end
-			else
-				warn("No packages found matching the given names")
+			end
+			if found == 0 then
+				print("  (none)")
 			end
 
 		elseif action == "remote" then
 			local subaction = args[2]
 			if not subaction then
-				print("No subcommand given.")
+				print("[Cealshell] Usage: rbxpackage remote <list|add|remove> [url]")
+				return
 			elseif subaction == "list" then
-				print("List of active remotes:")
-				for _, x in pairs(remotes) do
-					print(x)
+				print("[Cealshell] Active remotes:")
+				for _, url in pairs(remotes) do
+					print("  - " .. url)
 				end
 			elseif subaction == "add" then
-				local remote = args[3]
-				if not remote then
-					print("No remote given.")
+				local url = args[3]
+				if not url then
+					warn("[Cealshell] Usage: rbxpackage remote add <url>")
 					return
 				end
-				if not table.find(remotes, remote) then
-					table.insert(remotes, remote)
-					print("Added remote '" .. remote .. "' to registry.")
+				if table.find(remotes, url) then
+					print("[Cealshell] Remote '" .. url .. "' is already registered.")
 				else
-					print("Remote '" .. remote .. "' already registered.")
+					table.insert(remotes, url)
+					saveRemotes()
+					print("[Cealshell] Added remote '" .. url .. "'")
 				end
 			elseif table.find({"rm", "remove", "delete"}, subaction) then
-				local remote = args[3]
-				if not remote then
-					print("No remote given.")
+				local url = args[3]
+				if not url then
+					warn("[Cealshell] Usage: rbxpackage remote remove <url>")
 					return
 				end
-				if table.find(remotes, remote) then
-					table.remove(remotes, table.find(remotes, remote))
-					print("Removed remote '" .. remote .. "' from registry.")
+				if table.find(remotes, url) then
+					table.remove(remotes, table.find(remotes, url))
+					saveRemotes()
+					print("[Cealshell] Removed remote '" .. url .. "'")
 				else
-					print("Remote '" .. remote .. "' not registered.")
+					print("[Cealshell] Remote '" .. url .. "' not registered.")
 				end
 			else
-				print("Unknown subcommand.")
+				print("[Cealshell] Unknown remote subcommand: " .. subaction)
 			end
-			
-		elseif action == "list" then
-			local i = helper:ensureCealshellPath()
-			local p = args[2]
-			for _, x in i:GetChildren() do
-				if p then
-					if x.Name:find(p) then
-						print(x.Name)
-					end
-				else
-					print(x.Name)
-				end
-			end
-			
 		else
-			print("Unknown subcommand.")
+			print("[Cealshell] Unknown action: " .. action)
 		end
-	end, "Packet Manager for Cealshell.", {
+	end, "Package manager for Cealshell.", {
 		[1] = "Manages packages from configured remotes.",
 
 		["install"] = {
-			"rbxpackage i/install/add <package>",
-			"Installs one or more packages from your registered remotes.",
-			"Example: rbxpackage install DataStore2",
+			"rbxpackage install [package...]",
+			"Installs one or more packages from registered remotes.",
+			"Options:",
+			"  -s     Install to shared storage (ReplicatedStorage)",
+			"  -y     Auto-confirm installation",
+			"  -i     Insert into selected instance",
 		},
 		["remove"] = {
-			"rbxpackage rm/uninstall/remove <package>",
-			"Removes an installed package from your workspace.",
-		},
-		["search"] = {
-			"rbxpackage search <package>",
-			"Searches for a package from active remotes.",
-		},
-		["remote"] = {
-			"rbxpackage remote add <url> — adds a remote source",
-			"rbxpackage remote rm/remove/delete <url> — removes a remote source",
-			"rbxpackage remote list — lists all active remotes",
+			"rbxpackage remove [package...]",
+			"Removes installed packages from your workspace.",
+			"Options:",
+			"  -s     Remove from shared storage (ReplicatedStorage)",
+			"  -y     Auto-confirm removal",
 		},
 		["list"] = {
-			"rbxpackage list <package?>",
-			"lists all installed packages"
-		}
+			"rbxpackage list [pattern]",
+			"Lists installed packages (optionally filtered by pattern).",
+		},
+		["remote"] = {
+			"rbxpackage remote list          — Lists all active remotes",
+			"rbxpackage remote add <url>     — Adds a new remote source",
+			"rbxpackage remote remove <url>  — Removes a remote source",
+		},
 	}, signer):alias({"rbxp", "pacman"})
 
 	--c clear
