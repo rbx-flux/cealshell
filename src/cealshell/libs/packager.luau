@@ -111,6 +111,8 @@ function packager:build(package: {instances: {}}, parent: Instance)
             return buildInstance(instanceData, parent)
         end
     end
+
+    return nil
 end
 
 return packager

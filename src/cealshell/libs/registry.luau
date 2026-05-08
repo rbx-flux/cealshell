@@ -95,4 +95,14 @@ function reg:call(command: string, givenArgs: {string})
 	rcmd.callback(args, cArgs)
 end
 
+function reg:resolve(name: string)
+    if reg.commands[name] then return reg.commands[name] end
+    for _, data in pairs(reg.commands) do
+        if table.find(data.stored_aliases:getAll(), name) then
+            return data
+        end
+    end
+    return nil
+end
+
 return reg
