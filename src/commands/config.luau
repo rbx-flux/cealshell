@@ -1,9 +1,11 @@
 local libs = script.Parent.Parent.libs
 local types = require(libs.types)
+local plugin
 
 return {
     name = "config",
     args = nil,
+	constructor = function(pl: Plugin) plugin = pl end,
     callback = function(args:{types.args}, cArgs:{string})
         local blacklist = {
 			"cealshell:remotes",
