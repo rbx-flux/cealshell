@@ -27,6 +27,7 @@ return {
 		local function run()
 			if args[2] then
 				plugin:SetSetting(tostring(args[1]), format(tostring(args[2])))
+				print(("[Cealshell] Successfully set '%s' to '%s' (%s)."):format(tostring(args[1]), tostring(args[2]), typeof(args[2])))
 			else
 				print(plugin:GetSetting(tostring(args[1])))
 			end
@@ -42,7 +43,6 @@ return {
 				return
 			end
 		end
-		print(("[Cealshell] Successfully set '%s' to '%s' (%s)."):format(tostring(args[1]), tostring(args[2]), typeof(args[2])))
     end,
     description = nil,
     manual = nil,
