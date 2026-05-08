@@ -21,11 +21,20 @@ return {
 				return x
 			end
 		end
+
+		local function run()
+			if args[2] then
+				plugin:SetSetting(tostring(args[1]), format(tostring(args[2])))
+			else
+				print(("%s: %s"):format(tostring(args[1]), plugin:GetSetting(tostring(args[1]))))
+			end
+		end
+
 		if plugin:GetSetting("cealshell:advanced") == true then
-			plugin:SetSetting(tostring(args[1]), format(tostring(args[2])))
+			run()
 		else
 			if not table.find(blacklist, args[1]) then
-				plugin:SetSetting(tostring(args[1]), format(tostring(args[2])))
+				run()
 			else
 				warn("[Cealshell] This configuration is locked behind advanced mode. Use '--c config cealshell:advanced true' to enable it.")
 				return

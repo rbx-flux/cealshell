@@ -72,7 +72,7 @@ return {
 				print("  (none)")
 			end
 		elseif action == "sync" then
-			-- tbd
+			pmanager:sync(helper:doesArgExist("f", args))
 
 		elseif action == "remote" then
 			local subaction = args[2]
@@ -145,6 +145,12 @@ return {
 			"rbxpackage remote add <url>     — Adds a new remote source",
 			"rbxpackage remote remove <url>  — Removes a remote source",
 		},
+		["sync"] = {
+			"rbxpackage sync",
+			"Manually sync all packages from all remotes.",
+			"Options:",
+			"  -f	  Fresh Build the keyring.",
+		}
 	},
     signer = "cealshell",
     alias = {"pacman", "rbxp"},

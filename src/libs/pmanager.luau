@@ -19,6 +19,97 @@ function pmanager:check(share: boolean, name: string): boolean
     return ix:read()[name] ~= nil
 end
 
+-- Syncing
+function pmanager:sync(freshBuild: boolean?): boolean
+    local start = tick()
+    local function getPassed(s: number): string return tostring(math.floor((tick() - s)*10^3))  end
+    print("[Cealshell] Starting sync.")
+
+    print("Checking keyring...")
+    local keyring = plugin:GetSetting("cealshell:packages/keyring")
+    if typeof(keyring) ~= "table" then
+        print("Keyring is invalid. Trying refetch...")
+        keyring = plugin:GetSetting("cealshell:packages/keyring")
+    end
+    if typeof(keyring) ~= "table" then
+        print("Keyring is invalid. Resetting keyring.")
+        keyring = {}
+        plugin:SetSetting("cealshell:packages/keyring", {})
+    end
+    
+    local function getRemotesSafe(): any
+        local remotes = plugin:GetSetting("cealshell:remotes")
+        if typeof(remotes) ~= "table" then
+            print("Remotes invalid. Trying refetch...")
+            remotes = plugin:GetSetting("cealshell:remotes")
+        end
+        if typeof(remotes) ~= "table" then
+            print("Remotes invalid - bailing out. You're on your own now, good luck.")
+            print(("[Cealshell] Failed to sync in %sms."):format(getPassed(start)))
+            return false
+        end
+        return remotes
+    end
+
+    local function check()
+        for remote, data in keyring do
+            local remotes = getRemotesSafe()
+            if not remotes then return end
+            local exists = false
+            for _, x in remotes do
+                exists = (x == remote)
+                if exists then break end
+            end
+            if not exists then
+                keyring[remote] = nil
+                print(("Removed deprecated remote %s."):format(remote))
+            end
+        end
+    end
+
+    local function syncRemote(remote: string): boolean
+        local startR = tick()
+        local trailingSlash = (remote:sub(#remote, #remote) == "/")
+        local finalUrl = ("%s%sapi/packages"):format(remote, trailingSlash and "" or "/")
+        print(("Syncing remote %s..."):format(finalUrl))
+        local data = HttpService:GetAsync(finalUrl)
+        local decoded = HttpService:JSONDecode(data)
+        if typeof(decoded) ~= "table" or not decoded.data then
+            print(("Returned data of %s is invalid. Skipping."):format(finalUrl))
+            return false
+        end
+        keyring[remote] = decoded.data
+        print(("Sync of remote %s successful in %s."):format(finalUrl, getPassed(startR)))
+        return true
+    end
+
+    local function sync()
+        print("Fetching remotes...")
+        local remotes = getRemotesSafe()
+        if not remotes then return false end
+        print("Starting sync...")
+        for _, remote in remotes do
+           syncRemote(remote)
+        end
+        return true
+    end
+
+    if #keyring ~= 0 and not freshBuild then
+        check()
+        sync()
+    else
+        print("Building keyring due to request/being empty.")
+        sync()
+        print("Fresh Build successful.")
+    end
+
+    -- save keyring
+    plugin:SetSetting("cealshell:packages/keyring", keyring)
+    
+    print(("[Cealshell] Synced successfully in %sms."):format(getPassed(start)))
+    return true
+end
+
 -- Resolve package dependencies
 local function resolveDependencies(ix, toInstall, visited)
     visited = visited or {}
@@ -47,11 +138,11 @@ end
 local function executeInstall(toInstall: {{any}}, cealshellFolder: Instance, isInstanceSpecific: boolean)
     local ix
     if not isInstanceSpecific then
-        ix = require(cealshellFolder[".index"])
+        ix = require(cealshellFolder:FindFirstChild(".index"))
     end
     
     for _, pkg in pairs(toInstall) do
-        local source = packager:build(pkg.data, ix and cealshellFolder["src"] or cealshellFolder)
+        local source = packager:build(pkg.data, ix and cealshellFolder:FindFirstChild("src") or cealshellFolder)
         if ix ~= nil then
             ix:register(pkg.name, source)
         end
@@ -61,7 +152,7 @@ end
 
 -- Internal: Perform the actual uninstall
 local function executeUninstall(toRemove: {string}, cealshellFolder: Instance)
-    local ix = require(cealshellFolder[".index"])
+    local ix = require(cealshellFolder:FindFirstChild(".index"))
     local packages = ix:read()
     
     for _, pkgName in pairs(toRemove) do
@@ -99,7 +190,7 @@ function pmanager:install(data: {[string]: boolean}, autoConfirm: boolean, remot
     end
 
     -- Get package data from remotes
-    local toInstall = {}
+    local toInstall: {{any}} = {}
     for _, pkg in pairs(packages) do
         if type(pkg) ~= "string" or pkg == "" then continue end
         
