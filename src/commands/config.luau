@@ -28,7 +28,7 @@ return {
 			if args[2] then
 				plugin:SetSetting(tostring(args[1]), format(tostring(args[2])))
 			else
-				print(("%s: %s"):format(tostring(args[1]), plugin:GetSetting(tostring(args[1]))))
+				print(plugin:GetSetting(tostring(args[1])))
 			end
 		end
 
