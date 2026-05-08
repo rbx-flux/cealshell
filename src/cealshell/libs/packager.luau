@@ -4,8 +4,8 @@ local HttpService = game:GetService("HttpService")
 --// Globals
 local packager = {}
 
-function packager:parse(package: string, remoteUrl: string?)
-    remoteUrl = remoteUrl or "https://api.cealshell.dev"
+function packager:parse(package: string, remote_Url: string?)
+    local remoteUrl: string = remote_Url or "https://api.cealshell.dev"
 
     -- Normalize remote URL: remove trailing slash if present
     if remoteUrl:sub(-1) == "/" then
@@ -69,7 +69,7 @@ function packager:retrieve(address: string)
     return data
 end
 
-function packager:build(package: {any}, parent: Instance)
+function packager:build(package: {instances: {}}, parent: Instance)
     if not package or not package.instances or #package.instances == 0 then
         warn("Invalid package data - no instances found")
         return

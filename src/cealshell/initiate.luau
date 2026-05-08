@@ -1,8 +1,4 @@
 return function(plugin: Plugin)
-	--// Services
-	local LogService = game:GetService("LogService")
-	local HttpService = game:GetService("HttpService")
-	
 	--// Locals
 	local signer = "cealshell"
 
@@ -14,7 +10,6 @@ return function(plugin: Plugin)
 	local registry = require(libs:FindFirstChild("registry"))
 	local types = require(libs:FindFirstChild("types"))
 	local helper = require(libs:FindFirstChild("helper"))
-	local packager = require(libs:FindFirstChild("packager"))
 	local pmanager = require(libs:FindFirstChild("pmanager"))
 	pmanager:constructor(plugin)
 
@@ -34,6 +29,7 @@ return function(plugin: Plugin)
 		plugin:SetSetting("cealshell:startup", true)
 		plugin:SetSetting("cealshell:advanced", false)
 		plugin:SetSetting("cealshell:remotes/default", "https://api.cealshell.dev/")
+		plugin:SetSetting("cealshell:packages/keyring", {})
 		
 		for _, remote in trustedremotes do
 			if not table.find(remotes, remote) then
@@ -174,30 +170,31 @@ return function(plugin: Plugin)
 	registry:register("config", nil, function(args:{types.args}, cArgs:{string})
 		local blacklist = {
 			"cealshell:remotes",
-			"cealshell:remotes/default"
+			"cealshell:remotes/default",
+			"cealshell:packages/keyring"
 		}
-		local function format(x: string)
+		local function format(x: string) : types.args
 			if x == "true" then
 				return true
 			elseif x == "false" then
 				return false
 			elseif x:match("^%-?%d+%.?%d*$") then
-				return tonumber(x)
+				return tonumber(x) or 0
 			else
 				return x
 			end
 		end
 		if plugin:GetSetting("cealshell:advanced") == true then
-			plugin:SetSetting(args[1], format(args[2]))
+			plugin:SetSetting(tostring(args[1]), format(tostring(args[2])))
 		else
 			if not table.find(blacklist, args[1]) then
-				plugin:SetSetting(args[1], format(args[2]))
+				plugin:SetSetting(tostring(args[1]), format(tostring(args[2])))
 			else
 				warn("[Cealshell] This configuration is locked behind advanced mode. Use '--c config cealshell:advanced true' to enable it.")
 				return
 			end
 		end
-		print(("[Cealshell] Successfully set '%s' to '%s' (%s)."):format(args[1], args[2], typeof(args[2])))
+		print(("[Cealshell] Successfully set '%s' to '%s' (%s)."):format(tostring(args[1]), tostring(args[2]), typeof(args[2])))
 	end, nil, nil, signer):alias("cfg")
 
 	--c confirm
@@ -283,6 +280,8 @@ return function(plugin: Plugin)
 			if found == 0 then
 				print("  (none)")
 			end
+		elseif action == "sync" then
+			-- tbd
 
 		elseif action == "remote" then
 			local subaction = args[2]
