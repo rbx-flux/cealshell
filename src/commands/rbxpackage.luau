@@ -23,7 +23,9 @@ return {
 		local inSelected = helper:doesArgExist("i", cArgs)
 
 		if table.find({"i", "install", "add"}, action) then
+			pmanager:sync()
 			print("[Cealshell] Looking for package(s) in remotes...")
+			remotes = plugin:GetSetting("cealshell:remotes")
 			
 			local lookingArgs = table.clone(args)
 			table.remove(lookingArgs, 1) -- Remove action
@@ -72,7 +74,7 @@ return {
 				print("  (none)")
 			end
 		elseif action == "sync" then
-			pmanager:sync(helper:doesArgExist("f", args))
+			pmanager:sync(helper:doesArgExist("f", args), helper:doesArgExist("d", args))
 
 		elseif action == "remote" then
 			local subaction = args[2]

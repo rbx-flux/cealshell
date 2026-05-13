@@ -20,19 +20,19 @@ function pmanager:check(share: boolean, name: string): boolean
 end
 
 -- Syncing
-function pmanager:sync(freshBuild: boolean?): boolean
+function pmanager:sync(freshBuild: boolean?, debugP: boolean?): boolean
     local start = tick()
     local function getPassed(s: number): string return tostring(math.floor((tick() - s)*10^3))  end
     print("[Cealshell] Starting sync.")
 
-    print("Checking keyring...")
+    if debugP then print("Checking keyring...") end
     local keyring = plugin:GetSetting("cealshell:packages/keyring")
     if typeof(keyring) ~= "table" then
-        print("Keyring is invalid. Trying refetch...")
+        if debugP then print("Keyring is invalid. Trying refetch...") end
         keyring = plugin:GetSetting("cealshell:packages/keyring")
     end
     if typeof(keyring) ~= "table" then
-        print("Keyring is invalid. Resetting keyring.")
+        if debugP then print("Keyring is invalid. Resetting keyring.") end
         keyring = {}
         plugin:SetSetting("cealshell:packages/keyring", {})
     end
@@ -40,7 +40,7 @@ function pmanager:sync(freshBuild: boolean?): boolean
     local function getRemotesSafe(): any
         local remotes = plugin:GetSetting("cealshell:remotes")
         if typeof(remotes) ~= "table" then
-            print("Remotes invalid. Trying refetch...")
+            if debugP then print("Remotes invalid. Trying refetch...") end
             remotes = plugin:GetSetting("cealshell:remotes")
         end
         if typeof(remotes) ~= "table" then
@@ -62,7 +62,7 @@ function pmanager:sync(freshBuild: boolean?): boolean
             end
             if not exists then
                 keyring[remote] = nil
-                print(("Removed deprecated remote %s."):format(remote))
+                if debugP then print(("Removed deprecated remote %s."):format(remote)) end
             end
         end
     end
@@ -71,36 +71,36 @@ function pmanager:sync(freshBuild: boolean?): boolean
         local startR = tick()
         local trailingSlash = (remote:sub(#remote, #remote) == "/")
         local finalUrl = ("%s%sapi/packages"):format(remote, trailingSlash and "" or "/")
-        print(("Syncing remote %s..."):format(finalUrl))
+        if debugP then print(("Syncing remote %s..."):format(finalUrl)) end
         local data = HttpService:GetAsync(finalUrl)
         local decoded = HttpService:JSONDecode(data)
         if typeof(decoded) ~= "table" or not decoded.data then
-            print(("Returned data of %s is invalid. Skipping."):format(finalUrl))
+            if debugP then print(("Returned data of %s is invalid. Skipping."):format(finalUrl)) end
             return false
         end
-        keyring[remote] = decoded.data
-        print(("Sync of remote %s successful in %s."):format(finalUrl, getPassed(startR)))
+        keyring[remote] = { packages = decoded.data.packages, remote = remote }
+        if debugP then print(("Sync of remote %s successful in %s."):format(finalUrl, getPassed(startR))) end
         return true
     end
 
     local function sync()
-        print("Fetching remotes...")
+        if debugP then print("Fetching remotes...") end
         local remotes = getRemotesSafe()
         if not remotes then return false end
-        print("Starting sync...")
+        if debugP then print("Starting sync...") end
         for _, remote in remotes do
            syncRemote(remote)
         end
         return true
     end
 
-    if #keyring ~= 0 and not freshBuild then
+    if next(keyring) ~= nil and not freshBuild then
         check()
         sync()
     else
-        print("Building keyring due to request/being empty.")
+        if debugP then print("Building keyring due to request/being empty.") end
         sync()
-        print("Fresh Build successful.")
+        if debugP then print("Fresh Build successful.") end
     end
 
     -- save keyring
@@ -170,16 +170,13 @@ end
 -- Install packages with optional confirmation
 function pmanager:install(data: {[string]: boolean}, autoConfirm: boolean, remotes: {string}, packages: {string})
     local share = data.s
-    local selectedInstance = data.i -- Instance to install into (optional)
-    
-    -- Use selected instance if provided, otherwise use cealshell folder
+    local selectedInstance = data.i
+
     local targetFolder
     local ix
     if selectedInstance and typeof(selectedInstance) == "Instance" then
-        -- Create a .cealshell structure in the selected instance
         targetFolder = selectedInstance
     else
-        -- Use standard cealshell folder
         targetFolder = helper:ensureCealshellPath(share)
         ix = require(targetFolder[".index"])
     end
@@ -189,60 +186,77 @@ function pmanager:install(data: {[string]: boolean}, autoConfirm: boolean, remot
         return
     end
 
-    -- Get package data from remotes
-    local toInstall: {{any}} = {}
+    -- Load keyring
+    local keyring = plugin:GetSetting("cealshell:packages/keyring")
+    if typeof(keyring) ~= "table" then
+        warn("[Cealshell] Keyring is missing or invalid. Run 'rbxpackage sync' first.")
+        return
+    end
+
+    -- Build slug→entry lookup (entry has username, name, etc.)
+    local available = {}
+    for _, remoteData in pairs(keyring) do
+        if typeof(remoteData) == "table" and typeof(remoteData.packages) == "table" then
+            for _, entry in pairs(remoteData.packages) do
+                if entry.slug and not available[entry.slug] then
+                    available[entry.slug] = { entry = entry, remote = remoteData.remote }
+                end
+            end
+        end
+    end
+
+    -- Resolve packages
+    local toInstall: {any} = {}
     for _, pkg in pairs(packages) do
         if type(pkg) ~= "string" or pkg == "" then continue end
-        
-        local retrievedPackage = nil
+
         local hasUrl = pkg:find("/") ~= nil
         local hasAuthor = pkg:find(":") ~= nil
 
+        -- Parse out slug and optional version
+        local lookupSlug, version
         if hasUrl then
-            local packageUrl = packager:parse(pkg)
-            local packageData = packager:retrieve(packageUrl)
-            if packageData then
-                local success, parsed = pcall(HttpService.JSONDecode, HttpService, packageData)
-                if success and parsed then
-                    retrievedPackage = parsed.data or parsed
-                end
-            end
+            local parts = pkg:split("/")[2]:split(":")
+            local rest = parts[2]:split("@")
+            lookupSlug = rest[1]:lower()
+            version = rest[2]
         elseif hasAuthor then
-            local defaultRemote = remotes[1]
-            if not defaultRemote then
-                local setting = plugin:GetSetting("cealshell:remotes/default")
-                if setting then defaultRemote = setting end
-            end
-            
-            if defaultRemote then
-                local packageUrl = packager:parse(pkg, defaultRemote)
-                local packageData = packager:retrieve(packageUrl)
-                if packageData then
-                    local success, parsed = pcall(HttpService.JSONDecode, HttpService, packageData)
-                    if success and parsed then
-                        retrievedPackage = parsed.data or parsed
-                    end
-                end
-            end
+            local rest = pkg:split(":")[2]:split("@")
+            lookupSlug = rest[1]:lower()
+            version = rest[2]
         else
-            for _, remote in pairs(remotes) do
-                local packageUrl = remote .. pkg
-                local packageData = packager:retrieve(packageUrl)
-                if packageData then
-                    local success, parsed = pcall(HttpService.JSONDecode, HttpService, packageData)
-                    if success and parsed then
-                        retrievedPackage = parsed.data or parsed
-                        break
-                    end
-                end
-            end
+            local rest = pkg:split("@")
+            lookupSlug = rest[1]:lower()
+            version = rest[2]
         end
-        
-        if retrievedPackage then
-            table.insert(toInstall, {name = pkg, data = retrievedPackage})
-        else
-            warn("[Cealshell] Could not find package '" .. pkg .. "' in any remote")
+
+        version = version or "latest"
+
+        -- Check keyring
+        local found = available[lookupSlug]
+        if not found then
+            warn("[Cealshell] Package '" .. lookupSlug .. "' not found in keyring. Run 'rbxpackage sync' or check the name.")
+            continue
         end
+
+        -- Fetch instance data from API
+        local entry = found.entry
+        local remote = found.remote
+        local fetchUrl = packager:parse(entry.username .. ":" .. entry.slug .. "@" .. version, remote)
+        local packageData = packager:retrieve(fetchUrl)
+
+        if not packageData then
+            warn("[Cealshell] Failed to fetch package '" .. entry.name .. "' from remote.")
+            continue
+        end
+
+        local success, parsed = pcall(HttpService.JSONDecode, HttpService, packageData)
+        if not success or not parsed or not parsed.data then
+            warn("[Cealshell] Invalid response for package '" .. entry.name .. "'.")
+            continue
+        end
+
+        table.insert(toInstall, { name = entry.name, slug = entry.slug, data = parsed.data })
     end
 
     if ix then

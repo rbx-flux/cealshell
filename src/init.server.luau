@@ -7,7 +7,8 @@
                                                                                                    
 Simple and easy CLI tool with integrated package manager.
 Designed for Roblox Studio.
-Licensed with MIT under (c) Flux Studio 2026.
+Licensed with MIT under (c) janisfox 2026.
+Contact: https://github.com/janisfox
 GitHub: https://github.com/rbx-flux/cealshell-cli
 Website: https://cealshell.dev/
 ]]--
@@ -24,7 +25,6 @@ local cmds = script:FindFirstChild("commands")
 
 --// Modules
 local reg = require(libs:FindFirstChild("registry"))
-local registry = require(libs:FindFirstChild("registry"))
 local pmanager = require(libs:FindFirstChild("pmanager"))
 pmanager:constructor(plugin)
 
@@ -80,23 +80,23 @@ if savedRemotes and typeof(savedRemotes) == "table" then
 end
 
 -- Register
-local function iretate(folder: Instance)
+local function iterate(folder: Instance)
 	for _, item in folder:GetChildren() do
 		if not item:IsA("ModuleScript") then
-			iretate(item)
+			iterate(item)
 			continue
 		end
 		local cmd = require(item)
 		if cmd.constructor then
 			cmd.constructor(plugin)
 		end
-		local r = registry:register(cmd.name, cmd.args, cmd.callback, cmd.description, cmd.manual, cmd.signer)
+		local r = reg:register(cmd.name, cmd.args, cmd.callback, cmd.description, cmd.manual, cmd.signer)
 		if cmd.alias and typeof(cmd.alias) == "table" then
 			r:alias(cmd.alias)
 		end
 	end
 end
-iretate(cmds)
+iterate(cmds)
 
 -- Misc
 plugin.Unloading:Connect(function()

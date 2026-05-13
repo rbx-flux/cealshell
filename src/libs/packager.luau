@@ -1,6 +1,37 @@
 --// Services
 local HttpService = game:GetService("HttpService")
 
+--// Local Functions
+local function deserializeValue(propertyData)
+    if type(propertyData) ~= "table" or not propertyData.type then
+        return propertyData -- primitive, use as-is
+    end
+
+    local t = propertyData.type
+    local v = propertyData.value
+
+    if t == "UDim2" then
+        return UDim2.new(v[1], v[2], v[3], v[4])
+    elseif t == "UDim" then
+        return UDim.new(v[1], v[2])
+    elseif t == "Color3" then
+        return Color3.fromRGB(v[1], v[2], v[3])
+    elseif t == "Vector2" then
+        return Vector2.new(v[1], v[2])
+    elseif t == "Vector3" then
+        return Vector3.new(v[1], v[2], v[3])
+    elseif t == "Enum" then
+        return Enum[v[1]][v[2]]
+    elseif t == "Font" then
+        -- depends on your serialization format
+        return Font.new(v.family, Enum.FontWeight[v.weight], Enum.FontStyle[v.style])
+    elseif t == "Instance" or t == "Object" then
+        return nil -- can't resolve cross-references at build time easily
+    end
+
+    return nil -- unknown type, skip
+end
+
 --// Globals
 local packager = {}
 
@@ -82,13 +113,10 @@ function packager:build(package: {instances: {}}, parent: Instance)
         if data.Properties then
             for propertyName, propertyData in pairs(data.Properties) do
                 if propertyName ~= "ClassName" and propertyName ~= "Name" and propertyName ~= "Parent" then
-                    if type(propertyData) == "table" and propertyData.type and propertyData.value then
+                    local value = deserializeValue(propertyData)
+                    if value ~= nil then
                         pcall(function()
-                            instance[propertyName] = propertyData.value
-                        end)
-                    elseif type(propertyData) ~= "table" or (propertyData.type ~= "Instance" and propertyData.type ~= "Object") then
-                        pcall(function()
-                            instance[propertyName] = propertyData
+                            instance[propertyName] = value
                         end)
                     end
                 end

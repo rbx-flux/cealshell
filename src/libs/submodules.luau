@@ -168,19 +168,19 @@ local function getTopLevelFunctions(src)
     return table.concat(result)
 end
 
-function submodules.get(key: string) : submodule
+function submodules.get(key: string) : submodule|nil
     if type(key) ~= "string" then return nil end
     return submodules.list[key]
 end
 
-function submodules.new(key: string, source: string) : submodule
+function submodules.new(key: string, source: string) : submodule|nil
     if type(key) ~= "string" then return nil end
     if type(source) ~= "string" then return nil end
     local self = setmetatable({}, submodules)
 
     local identificator = "--@submodule"
     if source:sub(1, #identificator) ~= identificator then
-        warn(("[Cealshell] Submodule '%s' has invalid syntax. (Missing --@submodule operator at first line)"))
+        warn(("[Cealshell] Submodule '%s' has invalid syntax. (Missing --@submodule operator at first line)"):format(key))
     end
 
     self.key = key
